@@ -12,4 +12,5 @@ type Cache interface {
 	Get(ctx context.Context, key string) (interface{}, error)
 	Expire(ctx context.Context, key string, expiration time.Duration) error
 	Ping(ctx context.Context) error
+	Close() error
 }

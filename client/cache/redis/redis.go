@@ -108,6 +108,10 @@ func (c *client) Ping(ctx context.Context) error {
 	return nil
 }
 
+func (c *client) Close() error {
+	return c.pool.Close()
+}
+
 func (c *client) execute(ctx context.Context, handler handler) error {
 	conn, err := c.getConnect(ctx)
 	if err != nil {
