@@ -34,7 +34,7 @@ func (m *manager) transaction(ctx context.Context, opts pgx.TxOptions, fn db.Han
 
 	tx, err = m.db.BeginTx(ctx, opts)
 	if err != nil {
-		return errors.Wrapf(err, "can't begin transaction")
+		return errors.Wrap(err, "can't begin transaction")
 	}
 
 	ctx = pg.MakeContextTx(ctx, tx)
@@ -64,7 +64,7 @@ func (m *manager) transaction(ctx context.Context, opts pgx.TxOptions, fn db.Han
 	}()
 
 	if err = fn(ctx); err != nil {
-		err = errors.Wrapf(err, "failed executing code inside transaction")
+		err = errors.Wrap(err, "failed executing code inside transaction")
 	}
 
 	return nil

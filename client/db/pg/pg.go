@@ -84,7 +84,7 @@ func (p *pg) QueryRowContext(ctx context.Context, query db.Query, args ...any) p
 
 	tx, ok := ctx.Value(TxKey).(pgx.Tx)
 	if ok {
-		tx.QueryRow(ctx, query.QueryRaw, args...)
+		return tx.QueryRow(ctx, query.QueryRaw, args...)
 	}
 
 	return p.dbc.QueryRow(ctx, query.QueryRaw, args...)
