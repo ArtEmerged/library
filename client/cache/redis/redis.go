@@ -2,15 +2,50 @@ package redis
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 	"time"
 
 	"github.com/gomodule/redigo/redis"
+	"github.com/pkg/errors"
 )
 
-func (c *client) HashSet(ctx context.Context, key, field string, value interface{}) error {
+func (c *client) Get(ctx context.Context, key string, in interface{}) error {
+	var value interface{}
 	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
-		_, err := conn.Do("HSET", redis.Args{key, field}.Add(value)...)
+		var errEx error
+		value, errEx = conn.Do("GET", key)
+		if errEx != nil {
+			return errEx
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	data, err := redis.Bytes(value, err)
+	if err != nil {
+		return errors.Wrap(err, "can't unmarshal value")
+	}
+
+	err = json.Unmarshal(data, in)
+	if err != nil {
+		return errors.Wrap(err, "can't unmarshal value")
+	}
+
+	return nil
+}
+
+func (c *client) Set(ctx context.Context, key string, value interface{}) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return errors.Wrap(err, "can't marshal value")
+	}
+
+	err = c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
+		_, err := conn.Do("SET", redis.Args{key}.Add(data)...)
 		if err != nil {
 			return err
 		}
@@ -24,7 +59,28 @@ func (c *client) HashSet(ctx context.Context, key, field string, value interface
 	return nil
 }
 
-func (c *client) HashGet(ctx context.Context, key, field string) (interface{}, error) {
+func (c *client) HSet(ctx context.Context, key, field string, value interface{}) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return errors.Wrap(err, "can't marshal value")
+	}
+
+	err = c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
+		_, err := conn.Do("HSET", redis.Args{key, field}.Add(data)...)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *client) HGet(ctx context.Context, key, field string, in interface{}) error {
 	var value interface{}
 	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
 		var errEx error
@@ -36,15 +92,30 @@ func (c *client) HashGet(ctx context.Context, key, field string) (interface{}, e
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return value, nil
+	data, err := redis.Bytes(value, err)
+	if err != nil {
+		return errors.Wrap(err, "can't unmarshal value")
+	}
+
+	err = json.Unmarshal(data, in)
+	if err != nil {
+		return errors.Wrap(err, "can't unmarshal value")
+	}
+
+	return nil
 }
 
-func (c *client) HashDel(ctx context.Context, key, field string) error {
+func (c *client) HDel(ctx context.Context, key string, field ...string) error {
 	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
-		_, err := conn.Do("HDEL", key, field)
+		args := redis.Args{key}
+		for _, f := range field {
+			args = args.Add(f)
+		}
+
+		_, err := conn.Do("HDEL", args...)
 		if err != nil {
 			return err
 		}
@@ -57,22 +128,7 @@ func (c *client) HashDel(ctx context.Context, key, field string) error {
 	return nil
 }
 
-func (c *client) Set(ctx context.Context, key string, value interface{}) error {
-	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
-		_, err := conn.Do("SET", redis.Args{key}.Add(value)...)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
+// TODO need to fix
 func (c *client) HGetAll(ctx context.Context, key string) ([]interface{}, error) {
 	var values []interface{}
 	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
@@ -89,24 +145,6 @@ func (c *client) HGetAll(ctx context.Context, key string) ([]interface{}, error)
 	}
 
 	return values, nil
-}
-
-func (c *client) Get(ctx context.Context, key string) (interface{}, error) {
-	var value interface{}
-	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
-		var errEx error
-		value, errEx = conn.Do("GET", key)
-		if errEx != nil {
-			return errEx
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return value, nil
 }
 
 func (c *client) Expire(ctx context.Context, key string, expiration time.Duration) error {
