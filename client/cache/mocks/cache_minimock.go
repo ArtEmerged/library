@@ -19,29 +19,41 @@ type CacheMock struct {
 	t          minimock.Tester
 	finishOnce sync.Once
 
+	funcClose          func() (err error)
+	inspectFuncClose   func()
+	afterCloseCounter  uint64
+	beforeCloseCounter uint64
+	CloseMock          mCacheMockClose
+
 	funcExpire          func(ctx context.Context, key string, expiration time.Duration) (err error)
 	inspectFuncExpire   func(ctx context.Context, key string, expiration time.Duration)
 	afterExpireCounter  uint64
 	beforeExpireCounter uint64
 	ExpireMock          mCacheMockExpire
 
-	funcGet          func(ctx context.Context, key string) (p1 interface{}, err error)
-	inspectFuncGet   func(ctx context.Context, key string)
+	funcGet          func(ctx context.Context, key string, in interface{}) (err error)
+	inspectFuncGet   func(ctx context.Context, key string, in interface{})
 	afterGetCounter  uint64
 	beforeGetCounter uint64
 	GetMock          mCacheMockGet
 
-	funcHGetAll          func(ctx context.Context, key string) (pa1 []interface{}, err error)
-	inspectFuncHGetAll   func(ctx context.Context, key string)
-	afterHGetAllCounter  uint64
-	beforeHGetAllCounter uint64
-	HGetAllMock          mCacheMockHGetAll
+	funcHDel          func(ctx context.Context, key string, field ...string) (err error)
+	inspectFuncHDel   func(ctx context.Context, key string, field ...string)
+	afterHDelCounter  uint64
+	beforeHDelCounter uint64
+	HDelMock          mCacheMockHDel
 
-	funcHashSet          func(ctx context.Context, key string, values interface{}) (err error)
-	inspectFuncHashSet   func(ctx context.Context, key string, values interface{})
-	afterHashSetCounter  uint64
-	beforeHashSetCounter uint64
-	HashSetMock          mCacheMockHashSet
+	funcHGet          func(ctx context.Context, key string, field string, in interface{}) (err error)
+	inspectFuncHGet   func(ctx context.Context, key string, field string, in interface{})
+	afterHGetCounter  uint64
+	beforeHGetCounter uint64
+	HGetMock          mCacheMockHGet
+
+	funcHSet          func(ctx context.Context, key string, field string, value interface{}) (err error)
+	inspectFuncHSet   func(ctx context.Context, key string, field string, value interface{})
+	afterHSetCounter  uint64
+	beforeHSetCounter uint64
+	HSetMock          mCacheMockHSet
 
 	funcPing          func(ctx context.Context) (err error)
 	inspectFuncPing   func(ctx context.Context)
@@ -64,17 +76,22 @@ func NewCacheMock(t minimock.Tester) *CacheMock {
 		controller.RegisterMocker(m)
 	}
 
+	m.CloseMock = mCacheMockClose{mock: m}
+
 	m.ExpireMock = mCacheMockExpire{mock: m}
 	m.ExpireMock.callArgs = []*CacheMockExpireParams{}
 
 	m.GetMock = mCacheMockGet{mock: m}
 	m.GetMock.callArgs = []*CacheMockGetParams{}
 
-	m.HGetAllMock = mCacheMockHGetAll{mock: m}
-	m.HGetAllMock.callArgs = []*CacheMockHGetAllParams{}
+	m.HDelMock = mCacheMockHDel{mock: m}
+	m.HDelMock.callArgs = []*CacheMockHDelParams{}
 
-	m.HashSetMock = mCacheMockHashSet{mock: m}
-	m.HashSetMock.callArgs = []*CacheMockHashSetParams{}
+	m.HGetMock = mCacheMockHGet{mock: m}
+	m.HGetMock.callArgs = []*CacheMockHGetParams{}
+
+	m.HSetMock = mCacheMockHSet{mock: m}
+	m.HSetMock.callArgs = []*CacheMockHSetParams{}
 
 	m.PingMock = mCacheMockPing{mock: m}
 	m.PingMock.callArgs = []*CacheMockPingParams{}
@@ -85,6 +102,185 @@ func NewCacheMock(t minimock.Tester) *CacheMock {
 	t.Cleanup(m.MinimockFinish)
 
 	return m
+}
+
+type mCacheMockClose struct {
+	optional           bool
+	mock               *CacheMock
+	defaultExpectation *CacheMockCloseExpectation
+	expectations       []*CacheMockCloseExpectation
+
+	expectedInvocations uint64
+}
+
+// CacheMockCloseExpectation specifies expectation struct of the Cache.Close
+type CacheMockCloseExpectation struct {
+	mock *CacheMock
+
+	results *CacheMockCloseResults
+	Counter uint64
+}
+
+// CacheMockCloseResults contains results of the Cache.Close
+type CacheMockCloseResults struct {
+	err error
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmClose *mCacheMockClose) Optional() *mCacheMockClose {
+	mmClose.optional = true
+	return mmClose
+}
+
+// Expect sets up expected params for Cache.Close
+func (mmClose *mCacheMockClose) Expect() *mCacheMockClose {
+	if mmClose.mock.funcClose != nil {
+		mmClose.mock.t.Fatalf("CacheMock.Close mock is already set by Set")
+	}
+
+	if mmClose.defaultExpectation == nil {
+		mmClose.defaultExpectation = &CacheMockCloseExpectation{}
+	}
+
+	return mmClose
+}
+
+// Inspect accepts an inspector function that has same arguments as the Cache.Close
+func (mmClose *mCacheMockClose) Inspect(f func()) *mCacheMockClose {
+	if mmClose.mock.inspectFuncClose != nil {
+		mmClose.mock.t.Fatalf("Inspect function is already set for CacheMock.Close")
+	}
+
+	mmClose.mock.inspectFuncClose = f
+
+	return mmClose
+}
+
+// Return sets up results that will be returned by Cache.Close
+func (mmClose *mCacheMockClose) Return(err error) *CacheMock {
+	if mmClose.mock.funcClose != nil {
+		mmClose.mock.t.Fatalf("CacheMock.Close mock is already set by Set")
+	}
+
+	if mmClose.defaultExpectation == nil {
+		mmClose.defaultExpectation = &CacheMockCloseExpectation{mock: mmClose.mock}
+	}
+	mmClose.defaultExpectation.results = &CacheMockCloseResults{err}
+	return mmClose.mock
+}
+
+// Set uses given function f to mock the Cache.Close method
+func (mmClose *mCacheMockClose) Set(f func() (err error)) *CacheMock {
+	if mmClose.defaultExpectation != nil {
+		mmClose.mock.t.Fatalf("Default expectation is already set for the Cache.Close method")
+	}
+
+	if len(mmClose.expectations) > 0 {
+		mmClose.mock.t.Fatalf("Some expectations are already set for the Cache.Close method")
+	}
+
+	mmClose.mock.funcClose = f
+	return mmClose.mock
+}
+
+// Times sets number of times Cache.Close should be invoked
+func (mmClose *mCacheMockClose) Times(n uint64) *mCacheMockClose {
+	if n == 0 {
+		mmClose.mock.t.Fatalf("Times of CacheMock.Close mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmClose.expectedInvocations, n)
+	return mmClose
+}
+
+func (mmClose *mCacheMockClose) invocationsDone() bool {
+	if len(mmClose.expectations) == 0 && mmClose.defaultExpectation == nil && mmClose.mock.funcClose == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmClose.mock.afterCloseCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmClose.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// Close implements cache.Cache
+func (mmClose *CacheMock) Close() (err error) {
+	mm_atomic.AddUint64(&mmClose.beforeCloseCounter, 1)
+	defer mm_atomic.AddUint64(&mmClose.afterCloseCounter, 1)
+
+	if mmClose.inspectFuncClose != nil {
+		mmClose.inspectFuncClose()
+	}
+
+	if mmClose.CloseMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmClose.CloseMock.defaultExpectation.Counter, 1)
+
+		mm_results := mmClose.CloseMock.defaultExpectation.results
+		if mm_results == nil {
+			mmClose.t.Fatal("No results are set for the CacheMock.Close")
+		}
+		return (*mm_results).err
+	}
+	if mmClose.funcClose != nil {
+		return mmClose.funcClose()
+	}
+	mmClose.t.Fatalf("Unexpected call to CacheMock.Close.")
+	return
+}
+
+// CloseAfterCounter returns a count of finished CacheMock.Close invocations
+func (mmClose *CacheMock) CloseAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmClose.afterCloseCounter)
+}
+
+// CloseBeforeCounter returns a count of CacheMock.Close invocations
+func (mmClose *CacheMock) CloseBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmClose.beforeCloseCounter)
+}
+
+// MinimockCloseDone returns true if the count of the Close invocations corresponds
+// the number of defined expectations
+func (m *CacheMock) MinimockCloseDone() bool {
+	if m.CloseMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.CloseMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.CloseMock.invocationsDone()
+}
+
+// MinimockCloseInspect logs each unmet expectation
+func (m *CacheMock) MinimockCloseInspect() {
+	for _, e := range m.CloseMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Error("Expected call to CacheMock.Close")
+		}
+	}
+
+	afterCloseCounter := mm_atomic.LoadUint64(&m.afterCloseCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.CloseMock.defaultExpectation != nil && afterCloseCounter < 1 {
+		m.t.Error("Expected call to CacheMock.Close")
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcClose != nil && afterCloseCounter < 1 {
+		m.t.Error("Expected call to CacheMock.Close")
+	}
+
+	if !m.CloseMock.invocationsDone() && afterCloseCounter > 0 {
+		m.t.Errorf("Expected %d calls to CacheMock.Close but found %d calls",
+			mm_atomic.LoadUint64(&m.CloseMock.expectedInvocations), afterCloseCounter)
+	}
 }
 
 type mCacheMockExpire struct {
@@ -460,17 +656,18 @@ type CacheMockGetExpectation struct {
 type CacheMockGetParams struct {
 	ctx context.Context
 	key string
+	in  interface{}
 }
 
 // CacheMockGetParamPtrs contains pointers to parameters of the Cache.Get
 type CacheMockGetParamPtrs struct {
 	ctx *context.Context
 	key *string
+	in  *interface{}
 }
 
 // CacheMockGetResults contains results of the Cache.Get
 type CacheMockGetResults struct {
-	p1  interface{}
 	err error
 }
 
@@ -485,7 +682,7 @@ func (mmGet *mCacheMockGet) Optional() *mCacheMockGet {
 }
 
 // Expect sets up expected params for Cache.Get
-func (mmGet *mCacheMockGet) Expect(ctx context.Context, key string) *mCacheMockGet {
+func (mmGet *mCacheMockGet) Expect(ctx context.Context, key string, in interface{}) *mCacheMockGet {
 	if mmGet.mock.funcGet != nil {
 		mmGet.mock.t.Fatalf("CacheMock.Get mock is already set by Set")
 	}
@@ -498,7 +695,7 @@ func (mmGet *mCacheMockGet) Expect(ctx context.Context, key string) *mCacheMockG
 		mmGet.mock.t.Fatalf("CacheMock.Get mock is already set by ExpectParams functions")
 	}
 
-	mmGet.defaultExpectation.params = &CacheMockGetParams{ctx, key}
+	mmGet.defaultExpectation.params = &CacheMockGetParams{ctx, key, in}
 	for _, e := range mmGet.expectations {
 		if minimock.Equal(e.params, mmGet.defaultExpectation.params) {
 			mmGet.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmGet.defaultExpectation.params)
@@ -552,8 +749,30 @@ func (mmGet *mCacheMockGet) ExpectKeyParam2(key string) *mCacheMockGet {
 	return mmGet
 }
 
+// ExpectInParam3 sets up expected param in for Cache.Get
+func (mmGet *mCacheMockGet) ExpectInParam3(in interface{}) *mCacheMockGet {
+	if mmGet.mock.funcGet != nil {
+		mmGet.mock.t.Fatalf("CacheMock.Get mock is already set by Set")
+	}
+
+	if mmGet.defaultExpectation == nil {
+		mmGet.defaultExpectation = &CacheMockGetExpectation{}
+	}
+
+	if mmGet.defaultExpectation.params != nil {
+		mmGet.mock.t.Fatalf("CacheMock.Get mock is already set by Expect")
+	}
+
+	if mmGet.defaultExpectation.paramPtrs == nil {
+		mmGet.defaultExpectation.paramPtrs = &CacheMockGetParamPtrs{}
+	}
+	mmGet.defaultExpectation.paramPtrs.in = &in
+
+	return mmGet
+}
+
 // Inspect accepts an inspector function that has same arguments as the Cache.Get
-func (mmGet *mCacheMockGet) Inspect(f func(ctx context.Context, key string)) *mCacheMockGet {
+func (mmGet *mCacheMockGet) Inspect(f func(ctx context.Context, key string, in interface{})) *mCacheMockGet {
 	if mmGet.mock.inspectFuncGet != nil {
 		mmGet.mock.t.Fatalf("Inspect function is already set for CacheMock.Get")
 	}
@@ -564,7 +783,7 @@ func (mmGet *mCacheMockGet) Inspect(f func(ctx context.Context, key string)) *mC
 }
 
 // Return sets up results that will be returned by Cache.Get
-func (mmGet *mCacheMockGet) Return(p1 interface{}, err error) *CacheMock {
+func (mmGet *mCacheMockGet) Return(err error) *CacheMock {
 	if mmGet.mock.funcGet != nil {
 		mmGet.mock.t.Fatalf("CacheMock.Get mock is already set by Set")
 	}
@@ -572,12 +791,12 @@ func (mmGet *mCacheMockGet) Return(p1 interface{}, err error) *CacheMock {
 	if mmGet.defaultExpectation == nil {
 		mmGet.defaultExpectation = &CacheMockGetExpectation{mock: mmGet.mock}
 	}
-	mmGet.defaultExpectation.results = &CacheMockGetResults{p1, err}
+	mmGet.defaultExpectation.results = &CacheMockGetResults{err}
 	return mmGet.mock
 }
 
 // Set uses given function f to mock the Cache.Get method
-func (mmGet *mCacheMockGet) Set(f func(ctx context.Context, key string) (p1 interface{}, err error)) *CacheMock {
+func (mmGet *mCacheMockGet) Set(f func(ctx context.Context, key string, in interface{}) (err error)) *CacheMock {
 	if mmGet.defaultExpectation != nil {
 		mmGet.mock.t.Fatalf("Default expectation is already set for the Cache.Get method")
 	}
@@ -592,22 +811,22 @@ func (mmGet *mCacheMockGet) Set(f func(ctx context.Context, key string) (p1 inte
 
 // When sets expectation for the Cache.Get which will trigger the result defined by the following
 // Then helper
-func (mmGet *mCacheMockGet) When(ctx context.Context, key string) *CacheMockGetExpectation {
+func (mmGet *mCacheMockGet) When(ctx context.Context, key string, in interface{}) *CacheMockGetExpectation {
 	if mmGet.mock.funcGet != nil {
 		mmGet.mock.t.Fatalf("CacheMock.Get mock is already set by Set")
 	}
 
 	expectation := &CacheMockGetExpectation{
 		mock:   mmGet.mock,
-		params: &CacheMockGetParams{ctx, key},
+		params: &CacheMockGetParams{ctx, key, in},
 	}
 	mmGet.expectations = append(mmGet.expectations, expectation)
 	return expectation
 }
 
 // Then sets up Cache.Get return parameters for the expectation previously defined by the When method
-func (e *CacheMockGetExpectation) Then(p1 interface{}, err error) *CacheMock {
-	e.results = &CacheMockGetResults{p1, err}
+func (e *CacheMockGetExpectation) Then(err error) *CacheMock {
+	e.results = &CacheMockGetResults{err}
 	return e.mock
 }
 
@@ -632,15 +851,15 @@ func (mmGet *mCacheMockGet) invocationsDone() bool {
 }
 
 // Get implements cache.Cache
-func (mmGet *CacheMock) Get(ctx context.Context, key string) (p1 interface{}, err error) {
+func (mmGet *CacheMock) Get(ctx context.Context, key string, in interface{}) (err error) {
 	mm_atomic.AddUint64(&mmGet.beforeGetCounter, 1)
 	defer mm_atomic.AddUint64(&mmGet.afterGetCounter, 1)
 
 	if mmGet.inspectFuncGet != nil {
-		mmGet.inspectFuncGet(ctx, key)
+		mmGet.inspectFuncGet(ctx, key, in)
 	}
 
-	mm_params := CacheMockGetParams{ctx, key}
+	mm_params := CacheMockGetParams{ctx, key, in}
 
 	// Record call args
 	mmGet.GetMock.mutex.Lock()
@@ -650,7 +869,7 @@ func (mmGet *CacheMock) Get(ctx context.Context, key string) (p1 interface{}, er
 	for _, e := range mmGet.GetMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.p1, e.results.err
+			return e.results.err
 		}
 	}
 
@@ -659,7 +878,7 @@ func (mmGet *CacheMock) Get(ctx context.Context, key string) (p1 interface{}, er
 		mm_want := mmGet.GetMock.defaultExpectation.params
 		mm_want_ptrs := mmGet.GetMock.defaultExpectation.paramPtrs
 
-		mm_got := CacheMockGetParams{ctx, key}
+		mm_got := CacheMockGetParams{ctx, key, in}
 
 		if mm_want_ptrs != nil {
 
@@ -671,6 +890,10 @@ func (mmGet *CacheMock) Get(ctx context.Context, key string) (p1 interface{}, er
 				mmGet.t.Errorf("CacheMock.Get got unexpected parameter key, want: %#v, got: %#v%s\n", *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
 			}
 
+			if mm_want_ptrs.in != nil && !minimock.Equal(*mm_want_ptrs.in, mm_got.in) {
+				mmGet.t.Errorf("CacheMock.Get got unexpected parameter in, want: %#v, got: %#v%s\n", *mm_want_ptrs.in, mm_got.in, minimock.Diff(*mm_want_ptrs.in, mm_got.in))
+			}
+
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
 			mmGet.t.Errorf("CacheMock.Get got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
@@ -679,12 +902,12 @@ func (mmGet *CacheMock) Get(ctx context.Context, key string) (p1 interface{}, er
 		if mm_results == nil {
 			mmGet.t.Fatal("No results are set for the CacheMock.Get")
 		}
-		return (*mm_results).p1, (*mm_results).err
+		return (*mm_results).err
 	}
 	if mmGet.funcGet != nil {
-		return mmGet.funcGet(ctx, key)
+		return mmGet.funcGet(ctx, key, in)
 	}
-	mmGet.t.Fatalf("Unexpected call to CacheMock.Get. %v %v", ctx, key)
+	mmGet.t.Fatalf("Unexpected call to CacheMock.Get. %v %v %v", ctx, key, in)
 	return
 }
 
@@ -756,42 +979,43 @@ func (m *CacheMock) MinimockGetInspect() {
 	}
 }
 
-type mCacheMockHGetAll struct {
+type mCacheMockHDel struct {
 	optional           bool
 	mock               *CacheMock
-	defaultExpectation *CacheMockHGetAllExpectation
-	expectations       []*CacheMockHGetAllExpectation
+	defaultExpectation *CacheMockHDelExpectation
+	expectations       []*CacheMockHDelExpectation
 
-	callArgs []*CacheMockHGetAllParams
+	callArgs []*CacheMockHDelParams
 	mutex    sync.RWMutex
 
 	expectedInvocations uint64
 }
 
-// CacheMockHGetAllExpectation specifies expectation struct of the Cache.HGetAll
-type CacheMockHGetAllExpectation struct {
+// CacheMockHDelExpectation specifies expectation struct of the Cache.HDel
+type CacheMockHDelExpectation struct {
 	mock      *CacheMock
-	params    *CacheMockHGetAllParams
-	paramPtrs *CacheMockHGetAllParamPtrs
-	results   *CacheMockHGetAllResults
+	params    *CacheMockHDelParams
+	paramPtrs *CacheMockHDelParamPtrs
+	results   *CacheMockHDelResults
 	Counter   uint64
 }
 
-// CacheMockHGetAllParams contains parameters of the Cache.HGetAll
-type CacheMockHGetAllParams struct {
-	ctx context.Context
-	key string
+// CacheMockHDelParams contains parameters of the Cache.HDel
+type CacheMockHDelParams struct {
+	ctx   context.Context
+	key   string
+	field []string
 }
 
-// CacheMockHGetAllParamPtrs contains pointers to parameters of the Cache.HGetAll
-type CacheMockHGetAllParamPtrs struct {
-	ctx *context.Context
-	key *string
+// CacheMockHDelParamPtrs contains pointers to parameters of the Cache.HDel
+type CacheMockHDelParamPtrs struct {
+	ctx   *context.Context
+	key   *string
+	field *[]string
 }
 
-// CacheMockHGetAllResults contains results of the Cache.HGetAll
-type CacheMockHGetAllResults struct {
-	pa1 []interface{}
+// CacheMockHDelResults contains results of the Cache.HDel
+type CacheMockHDelResults struct {
 	err error
 }
 
@@ -800,628 +1024,1058 @@ type CacheMockHGetAllResults struct {
 // Optional() makes method check to work in '0 or more' mode.
 // It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
 // catch the problems when the expected method call is totally skipped during test run.
-func (mmHGetAll *mCacheMockHGetAll) Optional() *mCacheMockHGetAll {
-	mmHGetAll.optional = true
-	return mmHGetAll
+func (mmHDel *mCacheMockHDel) Optional() *mCacheMockHDel {
+	mmHDel.optional = true
+	return mmHDel
 }
 
-// Expect sets up expected params for Cache.HGetAll
-func (mmHGetAll *mCacheMockHGetAll) Expect(ctx context.Context, key string) *mCacheMockHGetAll {
-	if mmHGetAll.mock.funcHGetAll != nil {
-		mmHGetAll.mock.t.Fatalf("CacheMock.HGetAll mock is already set by Set")
+// Expect sets up expected params for Cache.HDel
+func (mmHDel *mCacheMockHDel) Expect(ctx context.Context, key string, field ...string) *mCacheMockHDel {
+	if mmHDel.mock.funcHDel != nil {
+		mmHDel.mock.t.Fatalf("CacheMock.HDel mock is already set by Set")
 	}
 
-	if mmHGetAll.defaultExpectation == nil {
-		mmHGetAll.defaultExpectation = &CacheMockHGetAllExpectation{}
+	if mmHDel.defaultExpectation == nil {
+		mmHDel.defaultExpectation = &CacheMockHDelExpectation{}
 	}
 
-	if mmHGetAll.defaultExpectation.paramPtrs != nil {
-		mmHGetAll.mock.t.Fatalf("CacheMock.HGetAll mock is already set by ExpectParams functions")
+	if mmHDel.defaultExpectation.paramPtrs != nil {
+		mmHDel.mock.t.Fatalf("CacheMock.HDel mock is already set by ExpectParams functions")
 	}
 
-	mmHGetAll.defaultExpectation.params = &CacheMockHGetAllParams{ctx, key}
-	for _, e := range mmHGetAll.expectations {
-		if minimock.Equal(e.params, mmHGetAll.defaultExpectation.params) {
-			mmHGetAll.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHGetAll.defaultExpectation.params)
+	mmHDel.defaultExpectation.params = &CacheMockHDelParams{ctx, key, field}
+	for _, e := range mmHDel.expectations {
+		if minimock.Equal(e.params, mmHDel.defaultExpectation.params) {
+			mmHDel.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHDel.defaultExpectation.params)
 		}
 	}
 
-	return mmHGetAll
+	return mmHDel
 }
 
-// ExpectCtxParam1 sets up expected param ctx for Cache.HGetAll
-func (mmHGetAll *mCacheMockHGetAll) ExpectCtxParam1(ctx context.Context) *mCacheMockHGetAll {
-	if mmHGetAll.mock.funcHGetAll != nil {
-		mmHGetAll.mock.t.Fatalf("CacheMock.HGetAll mock is already set by Set")
+// ExpectCtxParam1 sets up expected param ctx for Cache.HDel
+func (mmHDel *mCacheMockHDel) ExpectCtxParam1(ctx context.Context) *mCacheMockHDel {
+	if mmHDel.mock.funcHDel != nil {
+		mmHDel.mock.t.Fatalf("CacheMock.HDel mock is already set by Set")
 	}
 
-	if mmHGetAll.defaultExpectation == nil {
-		mmHGetAll.defaultExpectation = &CacheMockHGetAllExpectation{}
+	if mmHDel.defaultExpectation == nil {
+		mmHDel.defaultExpectation = &CacheMockHDelExpectation{}
 	}
 
-	if mmHGetAll.defaultExpectation.params != nil {
-		mmHGetAll.mock.t.Fatalf("CacheMock.HGetAll mock is already set by Expect")
+	if mmHDel.defaultExpectation.params != nil {
+		mmHDel.mock.t.Fatalf("CacheMock.HDel mock is already set by Expect")
 	}
 
-	if mmHGetAll.defaultExpectation.paramPtrs == nil {
-		mmHGetAll.defaultExpectation.paramPtrs = &CacheMockHGetAllParamPtrs{}
+	if mmHDel.defaultExpectation.paramPtrs == nil {
+		mmHDel.defaultExpectation.paramPtrs = &CacheMockHDelParamPtrs{}
 	}
-	mmHGetAll.defaultExpectation.paramPtrs.ctx = &ctx
+	mmHDel.defaultExpectation.paramPtrs.ctx = &ctx
 
-	return mmHGetAll
+	return mmHDel
 }
 
-// ExpectKeyParam2 sets up expected param key for Cache.HGetAll
-func (mmHGetAll *mCacheMockHGetAll) ExpectKeyParam2(key string) *mCacheMockHGetAll {
-	if mmHGetAll.mock.funcHGetAll != nil {
-		mmHGetAll.mock.t.Fatalf("CacheMock.HGetAll mock is already set by Set")
+// ExpectKeyParam2 sets up expected param key for Cache.HDel
+func (mmHDel *mCacheMockHDel) ExpectKeyParam2(key string) *mCacheMockHDel {
+	if mmHDel.mock.funcHDel != nil {
+		mmHDel.mock.t.Fatalf("CacheMock.HDel mock is already set by Set")
 	}
 
-	if mmHGetAll.defaultExpectation == nil {
-		mmHGetAll.defaultExpectation = &CacheMockHGetAllExpectation{}
+	if mmHDel.defaultExpectation == nil {
+		mmHDel.defaultExpectation = &CacheMockHDelExpectation{}
 	}
 
-	if mmHGetAll.defaultExpectation.params != nil {
-		mmHGetAll.mock.t.Fatalf("CacheMock.HGetAll mock is already set by Expect")
+	if mmHDel.defaultExpectation.params != nil {
+		mmHDel.mock.t.Fatalf("CacheMock.HDel mock is already set by Expect")
 	}
 
-	if mmHGetAll.defaultExpectation.paramPtrs == nil {
-		mmHGetAll.defaultExpectation.paramPtrs = &CacheMockHGetAllParamPtrs{}
+	if mmHDel.defaultExpectation.paramPtrs == nil {
+		mmHDel.defaultExpectation.paramPtrs = &CacheMockHDelParamPtrs{}
 	}
-	mmHGetAll.defaultExpectation.paramPtrs.key = &key
+	mmHDel.defaultExpectation.paramPtrs.key = &key
 
-	return mmHGetAll
+	return mmHDel
 }
 
-// Inspect accepts an inspector function that has same arguments as the Cache.HGetAll
-func (mmHGetAll *mCacheMockHGetAll) Inspect(f func(ctx context.Context, key string)) *mCacheMockHGetAll {
-	if mmHGetAll.mock.inspectFuncHGetAll != nil {
-		mmHGetAll.mock.t.Fatalf("Inspect function is already set for CacheMock.HGetAll")
+// ExpectFieldParam3 sets up expected param field for Cache.HDel
+func (mmHDel *mCacheMockHDel) ExpectFieldParam3(field ...string) *mCacheMockHDel {
+	if mmHDel.mock.funcHDel != nil {
+		mmHDel.mock.t.Fatalf("CacheMock.HDel mock is already set by Set")
 	}
 
-	mmHGetAll.mock.inspectFuncHGetAll = f
+	if mmHDel.defaultExpectation == nil {
+		mmHDel.defaultExpectation = &CacheMockHDelExpectation{}
+	}
 
-	return mmHGetAll
+	if mmHDel.defaultExpectation.params != nil {
+		mmHDel.mock.t.Fatalf("CacheMock.HDel mock is already set by Expect")
+	}
+
+	if mmHDel.defaultExpectation.paramPtrs == nil {
+		mmHDel.defaultExpectation.paramPtrs = &CacheMockHDelParamPtrs{}
+	}
+	mmHDel.defaultExpectation.paramPtrs.field = &field
+
+	return mmHDel
 }
 
-// Return sets up results that will be returned by Cache.HGetAll
-func (mmHGetAll *mCacheMockHGetAll) Return(pa1 []interface{}, err error) *CacheMock {
-	if mmHGetAll.mock.funcHGetAll != nil {
-		mmHGetAll.mock.t.Fatalf("CacheMock.HGetAll mock is already set by Set")
+// Inspect accepts an inspector function that has same arguments as the Cache.HDel
+func (mmHDel *mCacheMockHDel) Inspect(f func(ctx context.Context, key string, field ...string)) *mCacheMockHDel {
+	if mmHDel.mock.inspectFuncHDel != nil {
+		mmHDel.mock.t.Fatalf("Inspect function is already set for CacheMock.HDel")
 	}
 
-	if mmHGetAll.defaultExpectation == nil {
-		mmHGetAll.defaultExpectation = &CacheMockHGetAllExpectation{mock: mmHGetAll.mock}
-	}
-	mmHGetAll.defaultExpectation.results = &CacheMockHGetAllResults{pa1, err}
-	return mmHGetAll.mock
+	mmHDel.mock.inspectFuncHDel = f
+
+	return mmHDel
 }
 
-// Set uses given function f to mock the Cache.HGetAll method
-func (mmHGetAll *mCacheMockHGetAll) Set(f func(ctx context.Context, key string) (pa1 []interface{}, err error)) *CacheMock {
-	if mmHGetAll.defaultExpectation != nil {
-		mmHGetAll.mock.t.Fatalf("Default expectation is already set for the Cache.HGetAll method")
+// Return sets up results that will be returned by Cache.HDel
+func (mmHDel *mCacheMockHDel) Return(err error) *CacheMock {
+	if mmHDel.mock.funcHDel != nil {
+		mmHDel.mock.t.Fatalf("CacheMock.HDel mock is already set by Set")
 	}
 
-	if len(mmHGetAll.expectations) > 0 {
-		mmHGetAll.mock.t.Fatalf("Some expectations are already set for the Cache.HGetAll method")
+	if mmHDel.defaultExpectation == nil {
+		mmHDel.defaultExpectation = &CacheMockHDelExpectation{mock: mmHDel.mock}
 	}
-
-	mmHGetAll.mock.funcHGetAll = f
-	return mmHGetAll.mock
+	mmHDel.defaultExpectation.results = &CacheMockHDelResults{err}
+	return mmHDel.mock
 }
 
-// When sets expectation for the Cache.HGetAll which will trigger the result defined by the following
+// Set uses given function f to mock the Cache.HDel method
+func (mmHDel *mCacheMockHDel) Set(f func(ctx context.Context, key string, field ...string) (err error)) *CacheMock {
+	if mmHDel.defaultExpectation != nil {
+		mmHDel.mock.t.Fatalf("Default expectation is already set for the Cache.HDel method")
+	}
+
+	if len(mmHDel.expectations) > 0 {
+		mmHDel.mock.t.Fatalf("Some expectations are already set for the Cache.HDel method")
+	}
+
+	mmHDel.mock.funcHDel = f
+	return mmHDel.mock
+}
+
+// When sets expectation for the Cache.HDel which will trigger the result defined by the following
 // Then helper
-func (mmHGetAll *mCacheMockHGetAll) When(ctx context.Context, key string) *CacheMockHGetAllExpectation {
-	if mmHGetAll.mock.funcHGetAll != nil {
-		mmHGetAll.mock.t.Fatalf("CacheMock.HGetAll mock is already set by Set")
+func (mmHDel *mCacheMockHDel) When(ctx context.Context, key string, field ...string) *CacheMockHDelExpectation {
+	if mmHDel.mock.funcHDel != nil {
+		mmHDel.mock.t.Fatalf("CacheMock.HDel mock is already set by Set")
 	}
 
-	expectation := &CacheMockHGetAllExpectation{
-		mock:   mmHGetAll.mock,
-		params: &CacheMockHGetAllParams{ctx, key},
+	expectation := &CacheMockHDelExpectation{
+		mock:   mmHDel.mock,
+		params: &CacheMockHDelParams{ctx, key, field},
 	}
-	mmHGetAll.expectations = append(mmHGetAll.expectations, expectation)
+	mmHDel.expectations = append(mmHDel.expectations, expectation)
 	return expectation
 }
 
-// Then sets up Cache.HGetAll return parameters for the expectation previously defined by the When method
-func (e *CacheMockHGetAllExpectation) Then(pa1 []interface{}, err error) *CacheMock {
-	e.results = &CacheMockHGetAllResults{pa1, err}
+// Then sets up Cache.HDel return parameters for the expectation previously defined by the When method
+func (e *CacheMockHDelExpectation) Then(err error) *CacheMock {
+	e.results = &CacheMockHDelResults{err}
 	return e.mock
 }
 
-// Times sets number of times Cache.HGetAll should be invoked
-func (mmHGetAll *mCacheMockHGetAll) Times(n uint64) *mCacheMockHGetAll {
+// Times sets number of times Cache.HDel should be invoked
+func (mmHDel *mCacheMockHDel) Times(n uint64) *mCacheMockHDel {
 	if n == 0 {
-		mmHGetAll.mock.t.Fatalf("Times of CacheMock.HGetAll mock can not be zero")
+		mmHDel.mock.t.Fatalf("Times of CacheMock.HDel mock can not be zero")
 	}
-	mm_atomic.StoreUint64(&mmHGetAll.expectedInvocations, n)
-	return mmHGetAll
+	mm_atomic.StoreUint64(&mmHDel.expectedInvocations, n)
+	return mmHDel
 }
 
-func (mmHGetAll *mCacheMockHGetAll) invocationsDone() bool {
-	if len(mmHGetAll.expectations) == 0 && mmHGetAll.defaultExpectation == nil && mmHGetAll.mock.funcHGetAll == nil {
+func (mmHDel *mCacheMockHDel) invocationsDone() bool {
+	if len(mmHDel.expectations) == 0 && mmHDel.defaultExpectation == nil && mmHDel.mock.funcHDel == nil {
 		return true
 	}
 
-	totalInvocations := mm_atomic.LoadUint64(&mmHGetAll.mock.afterHGetAllCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmHGetAll.expectedInvocations)
+	totalInvocations := mm_atomic.LoadUint64(&mmHDel.mock.afterHDelCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmHDel.expectedInvocations)
 
 	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
 }
 
-// HGetAll implements cache.Cache
-func (mmHGetAll *CacheMock) HGetAll(ctx context.Context, key string) (pa1 []interface{}, err error) {
-	mm_atomic.AddUint64(&mmHGetAll.beforeHGetAllCounter, 1)
-	defer mm_atomic.AddUint64(&mmHGetAll.afterHGetAllCounter, 1)
+// HDel implements cache.Cache
+func (mmHDel *CacheMock) HDel(ctx context.Context, key string, field ...string) (err error) {
+	mm_atomic.AddUint64(&mmHDel.beforeHDelCounter, 1)
+	defer mm_atomic.AddUint64(&mmHDel.afterHDelCounter, 1)
 
-	if mmHGetAll.inspectFuncHGetAll != nil {
-		mmHGetAll.inspectFuncHGetAll(ctx, key)
+	if mmHDel.inspectFuncHDel != nil {
+		mmHDel.inspectFuncHDel(ctx, key, field...)
 	}
 
-	mm_params := CacheMockHGetAllParams{ctx, key}
+	mm_params := CacheMockHDelParams{ctx, key, field}
 
 	// Record call args
-	mmHGetAll.HGetAllMock.mutex.Lock()
-	mmHGetAll.HGetAllMock.callArgs = append(mmHGetAll.HGetAllMock.callArgs, &mm_params)
-	mmHGetAll.HGetAllMock.mutex.Unlock()
-
-	for _, e := range mmHGetAll.HGetAllMock.expectations {
-		if minimock.Equal(*e.params, mm_params) {
-			mm_atomic.AddUint64(&e.Counter, 1)
-			return e.results.pa1, e.results.err
-		}
-	}
-
-	if mmHGetAll.HGetAllMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmHGetAll.HGetAllMock.defaultExpectation.Counter, 1)
-		mm_want := mmHGetAll.HGetAllMock.defaultExpectation.params
-		mm_want_ptrs := mmHGetAll.HGetAllMock.defaultExpectation.paramPtrs
-
-		mm_got := CacheMockHGetAllParams{ctx, key}
-
-		if mm_want_ptrs != nil {
-
-			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmHGetAll.t.Errorf("CacheMock.HGetAll got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
-			}
-
-			if mm_want_ptrs.key != nil && !minimock.Equal(*mm_want_ptrs.key, mm_got.key) {
-				mmHGetAll.t.Errorf("CacheMock.HGetAll got unexpected parameter key, want: %#v, got: %#v%s\n", *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
-			}
-
-		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmHGetAll.t.Errorf("CacheMock.HGetAll got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
-		}
-
-		mm_results := mmHGetAll.HGetAllMock.defaultExpectation.results
-		if mm_results == nil {
-			mmHGetAll.t.Fatal("No results are set for the CacheMock.HGetAll")
-		}
-		return (*mm_results).pa1, (*mm_results).err
-	}
-	if mmHGetAll.funcHGetAll != nil {
-		return mmHGetAll.funcHGetAll(ctx, key)
-	}
-	mmHGetAll.t.Fatalf("Unexpected call to CacheMock.HGetAll. %v %v", ctx, key)
-	return
-}
-
-// HGetAllAfterCounter returns a count of finished CacheMock.HGetAll invocations
-func (mmHGetAll *CacheMock) HGetAllAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmHGetAll.afterHGetAllCounter)
-}
-
-// HGetAllBeforeCounter returns a count of CacheMock.HGetAll invocations
-func (mmHGetAll *CacheMock) HGetAllBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmHGetAll.beforeHGetAllCounter)
-}
-
-// Calls returns a list of arguments used in each call to CacheMock.HGetAll.
-// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmHGetAll *mCacheMockHGetAll) Calls() []*CacheMockHGetAllParams {
-	mmHGetAll.mutex.RLock()
-
-	argCopy := make([]*CacheMockHGetAllParams, len(mmHGetAll.callArgs))
-	copy(argCopy, mmHGetAll.callArgs)
-
-	mmHGetAll.mutex.RUnlock()
-
-	return argCopy
-}
-
-// MinimockHGetAllDone returns true if the count of the HGetAll invocations corresponds
-// the number of defined expectations
-func (m *CacheMock) MinimockHGetAllDone() bool {
-	if m.HGetAllMock.optional {
-		// Optional methods provide '0 or more' call count restriction.
-		return true
-	}
-
-	for _, e := range m.HGetAllMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			return false
-		}
-	}
-
-	return m.HGetAllMock.invocationsDone()
-}
-
-// MinimockHGetAllInspect logs each unmet expectation
-func (m *CacheMock) MinimockHGetAllInspect() {
-	for _, e := range m.HGetAllMock.expectations {
-		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to CacheMock.HGetAll with params: %#v", *e.params)
-		}
-	}
-
-	afterHGetAllCounter := mm_atomic.LoadUint64(&m.afterHGetAllCounter)
-	// if default expectation was set then invocations count should be greater than zero
-	if m.HGetAllMock.defaultExpectation != nil && afterHGetAllCounter < 1 {
-		if m.HGetAllMock.defaultExpectation.params == nil {
-			m.t.Error("Expected call to CacheMock.HGetAll")
-		} else {
-			m.t.Errorf("Expected call to CacheMock.HGetAll with params: %#v", *m.HGetAllMock.defaultExpectation.params)
-		}
-	}
-	// if func was set then invocations count should be greater than zero
-	if m.funcHGetAll != nil && afterHGetAllCounter < 1 {
-		m.t.Error("Expected call to CacheMock.HGetAll")
-	}
-
-	if !m.HGetAllMock.invocationsDone() && afterHGetAllCounter > 0 {
-		m.t.Errorf("Expected %d calls to CacheMock.HGetAll but found %d calls",
-			mm_atomic.LoadUint64(&m.HGetAllMock.expectedInvocations), afterHGetAllCounter)
-	}
-}
-
-type mCacheMockHashSet struct {
-	optional           bool
-	mock               *CacheMock
-	defaultExpectation *CacheMockHashSetExpectation
-	expectations       []*CacheMockHashSetExpectation
-
-	callArgs []*CacheMockHashSetParams
-	mutex    sync.RWMutex
-
-	expectedInvocations uint64
-}
-
-// CacheMockHashSetExpectation specifies expectation struct of the Cache.HashSet
-type CacheMockHashSetExpectation struct {
-	mock      *CacheMock
-	params    *CacheMockHashSetParams
-	paramPtrs *CacheMockHashSetParamPtrs
-	results   *CacheMockHashSetResults
-	Counter   uint64
-}
-
-// CacheMockHashSetParams contains parameters of the Cache.HashSet
-type CacheMockHashSetParams struct {
-	ctx    context.Context
-	key    string
-	values interface{}
-}
-
-// CacheMockHashSetParamPtrs contains pointers to parameters of the Cache.HashSet
-type CacheMockHashSetParamPtrs struct {
-	ctx    *context.Context
-	key    *string
-	values *interface{}
-}
-
-// CacheMockHashSetResults contains results of the Cache.HashSet
-type CacheMockHashSetResults struct {
-	err error
-}
-
-// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
-// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
-// Optional() makes method check to work in '0 or more' mode.
-// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
-// catch the problems when the expected method call is totally skipped during test run.
-func (mmHashSet *mCacheMockHashSet) Optional() *mCacheMockHashSet {
-	mmHashSet.optional = true
-	return mmHashSet
-}
-
-// Expect sets up expected params for Cache.HashSet
-func (mmHashSet *mCacheMockHashSet) Expect(ctx context.Context, key string, values interface{}) *mCacheMockHashSet {
-	if mmHashSet.mock.funcHashSet != nil {
-		mmHashSet.mock.t.Fatalf("CacheMock.HashSet mock is already set by Set")
-	}
-
-	if mmHashSet.defaultExpectation == nil {
-		mmHashSet.defaultExpectation = &CacheMockHashSetExpectation{}
-	}
-
-	if mmHashSet.defaultExpectation.paramPtrs != nil {
-		mmHashSet.mock.t.Fatalf("CacheMock.HashSet mock is already set by ExpectParams functions")
-	}
-
-	mmHashSet.defaultExpectation.params = &CacheMockHashSetParams{ctx, key, values}
-	for _, e := range mmHashSet.expectations {
-		if minimock.Equal(e.params, mmHashSet.defaultExpectation.params) {
-			mmHashSet.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHashSet.defaultExpectation.params)
-		}
-	}
-
-	return mmHashSet
-}
-
-// ExpectCtxParam1 sets up expected param ctx for Cache.HashSet
-func (mmHashSet *mCacheMockHashSet) ExpectCtxParam1(ctx context.Context) *mCacheMockHashSet {
-	if mmHashSet.mock.funcHashSet != nil {
-		mmHashSet.mock.t.Fatalf("CacheMock.HashSet mock is already set by Set")
-	}
-
-	if mmHashSet.defaultExpectation == nil {
-		mmHashSet.defaultExpectation = &CacheMockHashSetExpectation{}
-	}
-
-	if mmHashSet.defaultExpectation.params != nil {
-		mmHashSet.mock.t.Fatalf("CacheMock.HashSet mock is already set by Expect")
-	}
-
-	if mmHashSet.defaultExpectation.paramPtrs == nil {
-		mmHashSet.defaultExpectation.paramPtrs = &CacheMockHashSetParamPtrs{}
-	}
-	mmHashSet.defaultExpectation.paramPtrs.ctx = &ctx
-
-	return mmHashSet
-}
-
-// ExpectKeyParam2 sets up expected param key for Cache.HashSet
-func (mmHashSet *mCacheMockHashSet) ExpectKeyParam2(key string) *mCacheMockHashSet {
-	if mmHashSet.mock.funcHashSet != nil {
-		mmHashSet.mock.t.Fatalf("CacheMock.HashSet mock is already set by Set")
-	}
-
-	if mmHashSet.defaultExpectation == nil {
-		mmHashSet.defaultExpectation = &CacheMockHashSetExpectation{}
-	}
-
-	if mmHashSet.defaultExpectation.params != nil {
-		mmHashSet.mock.t.Fatalf("CacheMock.HashSet mock is already set by Expect")
-	}
-
-	if mmHashSet.defaultExpectation.paramPtrs == nil {
-		mmHashSet.defaultExpectation.paramPtrs = &CacheMockHashSetParamPtrs{}
-	}
-	mmHashSet.defaultExpectation.paramPtrs.key = &key
-
-	return mmHashSet
-}
-
-// ExpectValuesParam3 sets up expected param values for Cache.HashSet
-func (mmHashSet *mCacheMockHashSet) ExpectValuesParam3(values interface{}) *mCacheMockHashSet {
-	if mmHashSet.mock.funcHashSet != nil {
-		mmHashSet.mock.t.Fatalf("CacheMock.HashSet mock is already set by Set")
-	}
-
-	if mmHashSet.defaultExpectation == nil {
-		mmHashSet.defaultExpectation = &CacheMockHashSetExpectation{}
-	}
-
-	if mmHashSet.defaultExpectation.params != nil {
-		mmHashSet.mock.t.Fatalf("CacheMock.HashSet mock is already set by Expect")
-	}
-
-	if mmHashSet.defaultExpectation.paramPtrs == nil {
-		mmHashSet.defaultExpectation.paramPtrs = &CacheMockHashSetParamPtrs{}
-	}
-	mmHashSet.defaultExpectation.paramPtrs.values = &values
-
-	return mmHashSet
-}
-
-// Inspect accepts an inspector function that has same arguments as the Cache.HashSet
-func (mmHashSet *mCacheMockHashSet) Inspect(f func(ctx context.Context, key string, values interface{})) *mCacheMockHashSet {
-	if mmHashSet.mock.inspectFuncHashSet != nil {
-		mmHashSet.mock.t.Fatalf("Inspect function is already set for CacheMock.HashSet")
-	}
-
-	mmHashSet.mock.inspectFuncHashSet = f
-
-	return mmHashSet
-}
-
-// Return sets up results that will be returned by Cache.HashSet
-func (mmHashSet *mCacheMockHashSet) Return(err error) *CacheMock {
-	if mmHashSet.mock.funcHashSet != nil {
-		mmHashSet.mock.t.Fatalf("CacheMock.HashSet mock is already set by Set")
-	}
-
-	if mmHashSet.defaultExpectation == nil {
-		mmHashSet.defaultExpectation = &CacheMockHashSetExpectation{mock: mmHashSet.mock}
-	}
-	mmHashSet.defaultExpectation.results = &CacheMockHashSetResults{err}
-	return mmHashSet.mock
-}
-
-// Set uses given function f to mock the Cache.HashSet method
-func (mmHashSet *mCacheMockHashSet) Set(f func(ctx context.Context, key string, values interface{}) (err error)) *CacheMock {
-	if mmHashSet.defaultExpectation != nil {
-		mmHashSet.mock.t.Fatalf("Default expectation is already set for the Cache.HashSet method")
-	}
-
-	if len(mmHashSet.expectations) > 0 {
-		mmHashSet.mock.t.Fatalf("Some expectations are already set for the Cache.HashSet method")
-	}
-
-	mmHashSet.mock.funcHashSet = f
-	return mmHashSet.mock
-}
-
-// When sets expectation for the Cache.HashSet which will trigger the result defined by the following
-// Then helper
-func (mmHashSet *mCacheMockHashSet) When(ctx context.Context, key string, values interface{}) *CacheMockHashSetExpectation {
-	if mmHashSet.mock.funcHashSet != nil {
-		mmHashSet.mock.t.Fatalf("CacheMock.HashSet mock is already set by Set")
-	}
-
-	expectation := &CacheMockHashSetExpectation{
-		mock:   mmHashSet.mock,
-		params: &CacheMockHashSetParams{ctx, key, values},
-	}
-	mmHashSet.expectations = append(mmHashSet.expectations, expectation)
-	return expectation
-}
-
-// Then sets up Cache.HashSet return parameters for the expectation previously defined by the When method
-func (e *CacheMockHashSetExpectation) Then(err error) *CacheMock {
-	e.results = &CacheMockHashSetResults{err}
-	return e.mock
-}
-
-// Times sets number of times Cache.HashSet should be invoked
-func (mmHashSet *mCacheMockHashSet) Times(n uint64) *mCacheMockHashSet {
-	if n == 0 {
-		mmHashSet.mock.t.Fatalf("Times of CacheMock.HashSet mock can not be zero")
-	}
-	mm_atomic.StoreUint64(&mmHashSet.expectedInvocations, n)
-	return mmHashSet
-}
-
-func (mmHashSet *mCacheMockHashSet) invocationsDone() bool {
-	if len(mmHashSet.expectations) == 0 && mmHashSet.defaultExpectation == nil && mmHashSet.mock.funcHashSet == nil {
-		return true
-	}
-
-	totalInvocations := mm_atomic.LoadUint64(&mmHashSet.mock.afterHashSetCounter)
-	expectedInvocations := mm_atomic.LoadUint64(&mmHashSet.expectedInvocations)
-
-	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
-}
-
-// HashSet implements cache.Cache
-func (mmHashSet *CacheMock) HashSet(ctx context.Context, key string, values interface{}) (err error) {
-	mm_atomic.AddUint64(&mmHashSet.beforeHashSetCounter, 1)
-	defer mm_atomic.AddUint64(&mmHashSet.afterHashSetCounter, 1)
-
-	if mmHashSet.inspectFuncHashSet != nil {
-		mmHashSet.inspectFuncHashSet(ctx, key, values)
-	}
-
-	mm_params := CacheMockHashSetParams{ctx, key, values}
-
-	// Record call args
-	mmHashSet.HashSetMock.mutex.Lock()
-	mmHashSet.HashSetMock.callArgs = append(mmHashSet.HashSetMock.callArgs, &mm_params)
-	mmHashSet.HashSetMock.mutex.Unlock()
-
-	for _, e := range mmHashSet.HashSetMock.expectations {
+	mmHDel.HDelMock.mutex.Lock()
+	mmHDel.HDelMock.callArgs = append(mmHDel.HDelMock.callArgs, &mm_params)
+	mmHDel.HDelMock.mutex.Unlock()
+
+	for _, e := range mmHDel.HDelMock.expectations {
 		if minimock.Equal(*e.params, mm_params) {
 			mm_atomic.AddUint64(&e.Counter, 1)
 			return e.results.err
 		}
 	}
 
-	if mmHashSet.HashSetMock.defaultExpectation != nil {
-		mm_atomic.AddUint64(&mmHashSet.HashSetMock.defaultExpectation.Counter, 1)
-		mm_want := mmHashSet.HashSetMock.defaultExpectation.params
-		mm_want_ptrs := mmHashSet.HashSetMock.defaultExpectation.paramPtrs
+	if mmHDel.HDelMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmHDel.HDelMock.defaultExpectation.Counter, 1)
+		mm_want := mmHDel.HDelMock.defaultExpectation.params
+		mm_want_ptrs := mmHDel.HDelMock.defaultExpectation.paramPtrs
 
-		mm_got := CacheMockHashSetParams{ctx, key, values}
+		mm_got := CacheMockHDelParams{ctx, key, field}
 
 		if mm_want_ptrs != nil {
 
 			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
-				mmHashSet.t.Errorf("CacheMock.HashSet got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+				mmHDel.t.Errorf("CacheMock.HDel got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
 			}
 
 			if mm_want_ptrs.key != nil && !minimock.Equal(*mm_want_ptrs.key, mm_got.key) {
-				mmHashSet.t.Errorf("CacheMock.HashSet got unexpected parameter key, want: %#v, got: %#v%s\n", *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
+				mmHDel.t.Errorf("CacheMock.HDel got unexpected parameter key, want: %#v, got: %#v%s\n", *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
 			}
 
-			if mm_want_ptrs.values != nil && !minimock.Equal(*mm_want_ptrs.values, mm_got.values) {
-				mmHashSet.t.Errorf("CacheMock.HashSet got unexpected parameter values, want: %#v, got: %#v%s\n", *mm_want_ptrs.values, mm_got.values, minimock.Diff(*mm_want_ptrs.values, mm_got.values))
+			if mm_want_ptrs.field != nil && !minimock.Equal(*mm_want_ptrs.field, mm_got.field) {
+				mmHDel.t.Errorf("CacheMock.HDel got unexpected parameter field, want: %#v, got: %#v%s\n", *mm_want_ptrs.field, mm_got.field, minimock.Diff(*mm_want_ptrs.field, mm_got.field))
 			}
 
 		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
-			mmHashSet.t.Errorf("CacheMock.HashSet got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+			mmHDel.t.Errorf("CacheMock.HDel got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
 		}
 
-		mm_results := mmHashSet.HashSetMock.defaultExpectation.results
+		mm_results := mmHDel.HDelMock.defaultExpectation.results
 		if mm_results == nil {
-			mmHashSet.t.Fatal("No results are set for the CacheMock.HashSet")
+			mmHDel.t.Fatal("No results are set for the CacheMock.HDel")
 		}
 		return (*mm_results).err
 	}
-	if mmHashSet.funcHashSet != nil {
-		return mmHashSet.funcHashSet(ctx, key, values)
+	if mmHDel.funcHDel != nil {
+		return mmHDel.funcHDel(ctx, key, field...)
 	}
-	mmHashSet.t.Fatalf("Unexpected call to CacheMock.HashSet. %v %v %v", ctx, key, values)
+	mmHDel.t.Fatalf("Unexpected call to CacheMock.HDel. %v %v %v", ctx, key, field)
 	return
 }
 
-// HashSetAfterCounter returns a count of finished CacheMock.HashSet invocations
-func (mmHashSet *CacheMock) HashSetAfterCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmHashSet.afterHashSetCounter)
+// HDelAfterCounter returns a count of finished CacheMock.HDel invocations
+func (mmHDel *CacheMock) HDelAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHDel.afterHDelCounter)
 }
 
-// HashSetBeforeCounter returns a count of CacheMock.HashSet invocations
-func (mmHashSet *CacheMock) HashSetBeforeCounter() uint64 {
-	return mm_atomic.LoadUint64(&mmHashSet.beforeHashSetCounter)
+// HDelBeforeCounter returns a count of CacheMock.HDel invocations
+func (mmHDel *CacheMock) HDelBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHDel.beforeHDelCounter)
 }
 
-// Calls returns a list of arguments used in each call to CacheMock.HashSet.
+// Calls returns a list of arguments used in each call to CacheMock.HDel.
 // The list is in the same order as the calls were made (i.e. recent calls have a higher index)
-func (mmHashSet *mCacheMockHashSet) Calls() []*CacheMockHashSetParams {
-	mmHashSet.mutex.RLock()
+func (mmHDel *mCacheMockHDel) Calls() []*CacheMockHDelParams {
+	mmHDel.mutex.RLock()
 
-	argCopy := make([]*CacheMockHashSetParams, len(mmHashSet.callArgs))
-	copy(argCopy, mmHashSet.callArgs)
+	argCopy := make([]*CacheMockHDelParams, len(mmHDel.callArgs))
+	copy(argCopy, mmHDel.callArgs)
 
-	mmHashSet.mutex.RUnlock()
+	mmHDel.mutex.RUnlock()
 
 	return argCopy
 }
 
-// MinimockHashSetDone returns true if the count of the HashSet invocations corresponds
+// MinimockHDelDone returns true if the count of the HDel invocations corresponds
 // the number of defined expectations
-func (m *CacheMock) MinimockHashSetDone() bool {
-	if m.HashSetMock.optional {
+func (m *CacheMock) MinimockHDelDone() bool {
+	if m.HDelMock.optional {
 		// Optional methods provide '0 or more' call count restriction.
 		return true
 	}
 
-	for _, e := range m.HashSetMock.expectations {
+	for _, e := range m.HDelMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
 			return false
 		}
 	}
 
-	return m.HashSetMock.invocationsDone()
+	return m.HDelMock.invocationsDone()
 }
 
-// MinimockHashSetInspect logs each unmet expectation
-func (m *CacheMock) MinimockHashSetInspect() {
-	for _, e := range m.HashSetMock.expectations {
+// MinimockHDelInspect logs each unmet expectation
+func (m *CacheMock) MinimockHDelInspect() {
+	for _, e := range m.HDelMock.expectations {
 		if mm_atomic.LoadUint64(&e.Counter) < 1 {
-			m.t.Errorf("Expected call to CacheMock.HashSet with params: %#v", *e.params)
+			m.t.Errorf("Expected call to CacheMock.HDel with params: %#v", *e.params)
 		}
 	}
 
-	afterHashSetCounter := mm_atomic.LoadUint64(&m.afterHashSetCounter)
+	afterHDelCounter := mm_atomic.LoadUint64(&m.afterHDelCounter)
 	// if default expectation was set then invocations count should be greater than zero
-	if m.HashSetMock.defaultExpectation != nil && afterHashSetCounter < 1 {
-		if m.HashSetMock.defaultExpectation.params == nil {
-			m.t.Error("Expected call to CacheMock.HashSet")
+	if m.HDelMock.defaultExpectation != nil && afterHDelCounter < 1 {
+		if m.HDelMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to CacheMock.HDel")
 		} else {
-			m.t.Errorf("Expected call to CacheMock.HashSet with params: %#v", *m.HashSetMock.defaultExpectation.params)
+			m.t.Errorf("Expected call to CacheMock.HDel with params: %#v", *m.HDelMock.defaultExpectation.params)
 		}
 	}
 	// if func was set then invocations count should be greater than zero
-	if m.funcHashSet != nil && afterHashSetCounter < 1 {
-		m.t.Error("Expected call to CacheMock.HashSet")
+	if m.funcHDel != nil && afterHDelCounter < 1 {
+		m.t.Error("Expected call to CacheMock.HDel")
 	}
 
-	if !m.HashSetMock.invocationsDone() && afterHashSetCounter > 0 {
-		m.t.Errorf("Expected %d calls to CacheMock.HashSet but found %d calls",
-			mm_atomic.LoadUint64(&m.HashSetMock.expectedInvocations), afterHashSetCounter)
+	if !m.HDelMock.invocationsDone() && afterHDelCounter > 0 {
+		m.t.Errorf("Expected %d calls to CacheMock.HDel but found %d calls",
+			mm_atomic.LoadUint64(&m.HDelMock.expectedInvocations), afterHDelCounter)
+	}
+}
+
+type mCacheMockHGet struct {
+	optional           bool
+	mock               *CacheMock
+	defaultExpectation *CacheMockHGetExpectation
+	expectations       []*CacheMockHGetExpectation
+
+	callArgs []*CacheMockHGetParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// CacheMockHGetExpectation specifies expectation struct of the Cache.HGet
+type CacheMockHGetExpectation struct {
+	mock      *CacheMock
+	params    *CacheMockHGetParams
+	paramPtrs *CacheMockHGetParamPtrs
+	results   *CacheMockHGetResults
+	Counter   uint64
+}
+
+// CacheMockHGetParams contains parameters of the Cache.HGet
+type CacheMockHGetParams struct {
+	ctx   context.Context
+	key   string
+	field string
+	in    interface{}
+}
+
+// CacheMockHGetParamPtrs contains pointers to parameters of the Cache.HGet
+type CacheMockHGetParamPtrs struct {
+	ctx   *context.Context
+	key   *string
+	field *string
+	in    *interface{}
+}
+
+// CacheMockHGetResults contains results of the Cache.HGet
+type CacheMockHGetResults struct {
+	err error
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmHGet *mCacheMockHGet) Optional() *mCacheMockHGet {
+	mmHGet.optional = true
+	return mmHGet
+}
+
+// Expect sets up expected params for Cache.HGet
+func (mmHGet *mCacheMockHGet) Expect(ctx context.Context, key string, field string, in interface{}) *mCacheMockHGet {
+	if mmHGet.mock.funcHGet != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Set")
+	}
+
+	if mmHGet.defaultExpectation == nil {
+		mmHGet.defaultExpectation = &CacheMockHGetExpectation{}
+	}
+
+	if mmHGet.defaultExpectation.paramPtrs != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by ExpectParams functions")
+	}
+
+	mmHGet.defaultExpectation.params = &CacheMockHGetParams{ctx, key, field, in}
+	for _, e := range mmHGet.expectations {
+		if minimock.Equal(e.params, mmHGet.defaultExpectation.params) {
+			mmHGet.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHGet.defaultExpectation.params)
+		}
+	}
+
+	return mmHGet
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Cache.HGet
+func (mmHGet *mCacheMockHGet) ExpectCtxParam1(ctx context.Context) *mCacheMockHGet {
+	if mmHGet.mock.funcHGet != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Set")
+	}
+
+	if mmHGet.defaultExpectation == nil {
+		mmHGet.defaultExpectation = &CacheMockHGetExpectation{}
+	}
+
+	if mmHGet.defaultExpectation.params != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Expect")
+	}
+
+	if mmHGet.defaultExpectation.paramPtrs == nil {
+		mmHGet.defaultExpectation.paramPtrs = &CacheMockHGetParamPtrs{}
+	}
+	mmHGet.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmHGet
+}
+
+// ExpectKeyParam2 sets up expected param key for Cache.HGet
+func (mmHGet *mCacheMockHGet) ExpectKeyParam2(key string) *mCacheMockHGet {
+	if mmHGet.mock.funcHGet != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Set")
+	}
+
+	if mmHGet.defaultExpectation == nil {
+		mmHGet.defaultExpectation = &CacheMockHGetExpectation{}
+	}
+
+	if mmHGet.defaultExpectation.params != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Expect")
+	}
+
+	if mmHGet.defaultExpectation.paramPtrs == nil {
+		mmHGet.defaultExpectation.paramPtrs = &CacheMockHGetParamPtrs{}
+	}
+	mmHGet.defaultExpectation.paramPtrs.key = &key
+
+	return mmHGet
+}
+
+// ExpectFieldParam3 sets up expected param field for Cache.HGet
+func (mmHGet *mCacheMockHGet) ExpectFieldParam3(field string) *mCacheMockHGet {
+	if mmHGet.mock.funcHGet != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Set")
+	}
+
+	if mmHGet.defaultExpectation == nil {
+		mmHGet.defaultExpectation = &CacheMockHGetExpectation{}
+	}
+
+	if mmHGet.defaultExpectation.params != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Expect")
+	}
+
+	if mmHGet.defaultExpectation.paramPtrs == nil {
+		mmHGet.defaultExpectation.paramPtrs = &CacheMockHGetParamPtrs{}
+	}
+	mmHGet.defaultExpectation.paramPtrs.field = &field
+
+	return mmHGet
+}
+
+// ExpectInParam4 sets up expected param in for Cache.HGet
+func (mmHGet *mCacheMockHGet) ExpectInParam4(in interface{}) *mCacheMockHGet {
+	if mmHGet.mock.funcHGet != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Set")
+	}
+
+	if mmHGet.defaultExpectation == nil {
+		mmHGet.defaultExpectation = &CacheMockHGetExpectation{}
+	}
+
+	if mmHGet.defaultExpectation.params != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Expect")
+	}
+
+	if mmHGet.defaultExpectation.paramPtrs == nil {
+		mmHGet.defaultExpectation.paramPtrs = &CacheMockHGetParamPtrs{}
+	}
+	mmHGet.defaultExpectation.paramPtrs.in = &in
+
+	return mmHGet
+}
+
+// Inspect accepts an inspector function that has same arguments as the Cache.HGet
+func (mmHGet *mCacheMockHGet) Inspect(f func(ctx context.Context, key string, field string, in interface{})) *mCacheMockHGet {
+	if mmHGet.mock.inspectFuncHGet != nil {
+		mmHGet.mock.t.Fatalf("Inspect function is already set for CacheMock.HGet")
+	}
+
+	mmHGet.mock.inspectFuncHGet = f
+
+	return mmHGet
+}
+
+// Return sets up results that will be returned by Cache.HGet
+func (mmHGet *mCacheMockHGet) Return(err error) *CacheMock {
+	if mmHGet.mock.funcHGet != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Set")
+	}
+
+	if mmHGet.defaultExpectation == nil {
+		mmHGet.defaultExpectation = &CacheMockHGetExpectation{mock: mmHGet.mock}
+	}
+	mmHGet.defaultExpectation.results = &CacheMockHGetResults{err}
+	return mmHGet.mock
+}
+
+// Set uses given function f to mock the Cache.HGet method
+func (mmHGet *mCacheMockHGet) Set(f func(ctx context.Context, key string, field string, in interface{}) (err error)) *CacheMock {
+	if mmHGet.defaultExpectation != nil {
+		mmHGet.mock.t.Fatalf("Default expectation is already set for the Cache.HGet method")
+	}
+
+	if len(mmHGet.expectations) > 0 {
+		mmHGet.mock.t.Fatalf("Some expectations are already set for the Cache.HGet method")
+	}
+
+	mmHGet.mock.funcHGet = f
+	return mmHGet.mock
+}
+
+// When sets expectation for the Cache.HGet which will trigger the result defined by the following
+// Then helper
+func (mmHGet *mCacheMockHGet) When(ctx context.Context, key string, field string, in interface{}) *CacheMockHGetExpectation {
+	if mmHGet.mock.funcHGet != nil {
+		mmHGet.mock.t.Fatalf("CacheMock.HGet mock is already set by Set")
+	}
+
+	expectation := &CacheMockHGetExpectation{
+		mock:   mmHGet.mock,
+		params: &CacheMockHGetParams{ctx, key, field, in},
+	}
+	mmHGet.expectations = append(mmHGet.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Cache.HGet return parameters for the expectation previously defined by the When method
+func (e *CacheMockHGetExpectation) Then(err error) *CacheMock {
+	e.results = &CacheMockHGetResults{err}
+	return e.mock
+}
+
+// Times sets number of times Cache.HGet should be invoked
+func (mmHGet *mCacheMockHGet) Times(n uint64) *mCacheMockHGet {
+	if n == 0 {
+		mmHGet.mock.t.Fatalf("Times of CacheMock.HGet mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmHGet.expectedInvocations, n)
+	return mmHGet
+}
+
+func (mmHGet *mCacheMockHGet) invocationsDone() bool {
+	if len(mmHGet.expectations) == 0 && mmHGet.defaultExpectation == nil && mmHGet.mock.funcHGet == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmHGet.mock.afterHGetCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmHGet.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// HGet implements cache.Cache
+func (mmHGet *CacheMock) HGet(ctx context.Context, key string, field string, in interface{}) (err error) {
+	mm_atomic.AddUint64(&mmHGet.beforeHGetCounter, 1)
+	defer mm_atomic.AddUint64(&mmHGet.afterHGetCounter, 1)
+
+	if mmHGet.inspectFuncHGet != nil {
+		mmHGet.inspectFuncHGet(ctx, key, field, in)
+	}
+
+	mm_params := CacheMockHGetParams{ctx, key, field, in}
+
+	// Record call args
+	mmHGet.HGetMock.mutex.Lock()
+	mmHGet.HGetMock.callArgs = append(mmHGet.HGetMock.callArgs, &mm_params)
+	mmHGet.HGetMock.mutex.Unlock()
+
+	for _, e := range mmHGet.HGetMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmHGet.HGetMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmHGet.HGetMock.defaultExpectation.Counter, 1)
+		mm_want := mmHGet.HGetMock.defaultExpectation.params
+		mm_want_ptrs := mmHGet.HGetMock.defaultExpectation.paramPtrs
+
+		mm_got := CacheMockHGetParams{ctx, key, field, in}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmHGet.t.Errorf("CacheMock.HGet got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.key != nil && !minimock.Equal(*mm_want_ptrs.key, mm_got.key) {
+				mmHGet.t.Errorf("CacheMock.HGet got unexpected parameter key, want: %#v, got: %#v%s\n", *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
+			}
+
+			if mm_want_ptrs.field != nil && !minimock.Equal(*mm_want_ptrs.field, mm_got.field) {
+				mmHGet.t.Errorf("CacheMock.HGet got unexpected parameter field, want: %#v, got: %#v%s\n", *mm_want_ptrs.field, mm_got.field, minimock.Diff(*mm_want_ptrs.field, mm_got.field))
+			}
+
+			if mm_want_ptrs.in != nil && !minimock.Equal(*mm_want_ptrs.in, mm_got.in) {
+				mmHGet.t.Errorf("CacheMock.HGet got unexpected parameter in, want: %#v, got: %#v%s\n", *mm_want_ptrs.in, mm_got.in, minimock.Diff(*mm_want_ptrs.in, mm_got.in))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmHGet.t.Errorf("CacheMock.HGet got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmHGet.HGetMock.defaultExpectation.results
+		if mm_results == nil {
+			mmHGet.t.Fatal("No results are set for the CacheMock.HGet")
+		}
+		return (*mm_results).err
+	}
+	if mmHGet.funcHGet != nil {
+		return mmHGet.funcHGet(ctx, key, field, in)
+	}
+	mmHGet.t.Fatalf("Unexpected call to CacheMock.HGet. %v %v %v %v", ctx, key, field, in)
+	return
+}
+
+// HGetAfterCounter returns a count of finished CacheMock.HGet invocations
+func (mmHGet *CacheMock) HGetAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHGet.afterHGetCounter)
+}
+
+// HGetBeforeCounter returns a count of CacheMock.HGet invocations
+func (mmHGet *CacheMock) HGetBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHGet.beforeHGetCounter)
+}
+
+// Calls returns a list of arguments used in each call to CacheMock.HGet.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmHGet *mCacheMockHGet) Calls() []*CacheMockHGetParams {
+	mmHGet.mutex.RLock()
+
+	argCopy := make([]*CacheMockHGetParams, len(mmHGet.callArgs))
+	copy(argCopy, mmHGet.callArgs)
+
+	mmHGet.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockHGetDone returns true if the count of the HGet invocations corresponds
+// the number of defined expectations
+func (m *CacheMock) MinimockHGetDone() bool {
+	if m.HGetMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.HGetMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.HGetMock.invocationsDone()
+}
+
+// MinimockHGetInspect logs each unmet expectation
+func (m *CacheMock) MinimockHGetInspect() {
+	for _, e := range m.HGetMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to CacheMock.HGet with params: %#v", *e.params)
+		}
+	}
+
+	afterHGetCounter := mm_atomic.LoadUint64(&m.afterHGetCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.HGetMock.defaultExpectation != nil && afterHGetCounter < 1 {
+		if m.HGetMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to CacheMock.HGet")
+		} else {
+			m.t.Errorf("Expected call to CacheMock.HGet with params: %#v", *m.HGetMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcHGet != nil && afterHGetCounter < 1 {
+		m.t.Error("Expected call to CacheMock.HGet")
+	}
+
+	if !m.HGetMock.invocationsDone() && afterHGetCounter > 0 {
+		m.t.Errorf("Expected %d calls to CacheMock.HGet but found %d calls",
+			mm_atomic.LoadUint64(&m.HGetMock.expectedInvocations), afterHGetCounter)
+	}
+}
+
+type mCacheMockHSet struct {
+	optional           bool
+	mock               *CacheMock
+	defaultExpectation *CacheMockHSetExpectation
+	expectations       []*CacheMockHSetExpectation
+
+	callArgs []*CacheMockHSetParams
+	mutex    sync.RWMutex
+
+	expectedInvocations uint64
+}
+
+// CacheMockHSetExpectation specifies expectation struct of the Cache.HSet
+type CacheMockHSetExpectation struct {
+	mock      *CacheMock
+	params    *CacheMockHSetParams
+	paramPtrs *CacheMockHSetParamPtrs
+	results   *CacheMockHSetResults
+	Counter   uint64
+}
+
+// CacheMockHSetParams contains parameters of the Cache.HSet
+type CacheMockHSetParams struct {
+	ctx   context.Context
+	key   string
+	field string
+	value interface{}
+}
+
+// CacheMockHSetParamPtrs contains pointers to parameters of the Cache.HSet
+type CacheMockHSetParamPtrs struct {
+	ctx   *context.Context
+	key   *string
+	field *string
+	value *interface{}
+}
+
+// CacheMockHSetResults contains results of the Cache.HSet
+type CacheMockHSetResults struct {
+	err error
+}
+
+// Marks this method to be optional. The default behavior of any method with Return() is '1 or more', meaning
+// the test will fail minimock's automatic final call check if the mocked method was not called at least once.
+// Optional() makes method check to work in '0 or more' mode.
+// It is NOT RECOMMENDED to use this option unless you really need it, as default behaviour helps to
+// catch the problems when the expected method call is totally skipped during test run.
+func (mmHSet *mCacheMockHSet) Optional() *mCacheMockHSet {
+	mmHSet.optional = true
+	return mmHSet
+}
+
+// Expect sets up expected params for Cache.HSet
+func (mmHSet *mCacheMockHSet) Expect(ctx context.Context, key string, field string, value interface{}) *mCacheMockHSet {
+	if mmHSet.mock.funcHSet != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Set")
+	}
+
+	if mmHSet.defaultExpectation == nil {
+		mmHSet.defaultExpectation = &CacheMockHSetExpectation{}
+	}
+
+	if mmHSet.defaultExpectation.paramPtrs != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by ExpectParams functions")
+	}
+
+	mmHSet.defaultExpectation.params = &CacheMockHSetParams{ctx, key, field, value}
+	for _, e := range mmHSet.expectations {
+		if minimock.Equal(e.params, mmHSet.defaultExpectation.params) {
+			mmHSet.mock.t.Fatalf("Expectation set by When has same params: %#v", *mmHSet.defaultExpectation.params)
+		}
+	}
+
+	return mmHSet
+}
+
+// ExpectCtxParam1 sets up expected param ctx for Cache.HSet
+func (mmHSet *mCacheMockHSet) ExpectCtxParam1(ctx context.Context) *mCacheMockHSet {
+	if mmHSet.mock.funcHSet != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Set")
+	}
+
+	if mmHSet.defaultExpectation == nil {
+		mmHSet.defaultExpectation = &CacheMockHSetExpectation{}
+	}
+
+	if mmHSet.defaultExpectation.params != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Expect")
+	}
+
+	if mmHSet.defaultExpectation.paramPtrs == nil {
+		mmHSet.defaultExpectation.paramPtrs = &CacheMockHSetParamPtrs{}
+	}
+	mmHSet.defaultExpectation.paramPtrs.ctx = &ctx
+
+	return mmHSet
+}
+
+// ExpectKeyParam2 sets up expected param key for Cache.HSet
+func (mmHSet *mCacheMockHSet) ExpectKeyParam2(key string) *mCacheMockHSet {
+	if mmHSet.mock.funcHSet != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Set")
+	}
+
+	if mmHSet.defaultExpectation == nil {
+		mmHSet.defaultExpectation = &CacheMockHSetExpectation{}
+	}
+
+	if mmHSet.defaultExpectation.params != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Expect")
+	}
+
+	if mmHSet.defaultExpectation.paramPtrs == nil {
+		mmHSet.defaultExpectation.paramPtrs = &CacheMockHSetParamPtrs{}
+	}
+	mmHSet.defaultExpectation.paramPtrs.key = &key
+
+	return mmHSet
+}
+
+// ExpectFieldParam3 sets up expected param field for Cache.HSet
+func (mmHSet *mCacheMockHSet) ExpectFieldParam3(field string) *mCacheMockHSet {
+	if mmHSet.mock.funcHSet != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Set")
+	}
+
+	if mmHSet.defaultExpectation == nil {
+		mmHSet.defaultExpectation = &CacheMockHSetExpectation{}
+	}
+
+	if mmHSet.defaultExpectation.params != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Expect")
+	}
+
+	if mmHSet.defaultExpectation.paramPtrs == nil {
+		mmHSet.defaultExpectation.paramPtrs = &CacheMockHSetParamPtrs{}
+	}
+	mmHSet.defaultExpectation.paramPtrs.field = &field
+
+	return mmHSet
+}
+
+// ExpectValueParam4 sets up expected param value for Cache.HSet
+func (mmHSet *mCacheMockHSet) ExpectValueParam4(value interface{}) *mCacheMockHSet {
+	if mmHSet.mock.funcHSet != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Set")
+	}
+
+	if mmHSet.defaultExpectation == nil {
+		mmHSet.defaultExpectation = &CacheMockHSetExpectation{}
+	}
+
+	if mmHSet.defaultExpectation.params != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Expect")
+	}
+
+	if mmHSet.defaultExpectation.paramPtrs == nil {
+		mmHSet.defaultExpectation.paramPtrs = &CacheMockHSetParamPtrs{}
+	}
+	mmHSet.defaultExpectation.paramPtrs.value = &value
+
+	return mmHSet
+}
+
+// Inspect accepts an inspector function that has same arguments as the Cache.HSet
+func (mmHSet *mCacheMockHSet) Inspect(f func(ctx context.Context, key string, field string, value interface{})) *mCacheMockHSet {
+	if mmHSet.mock.inspectFuncHSet != nil {
+		mmHSet.mock.t.Fatalf("Inspect function is already set for CacheMock.HSet")
+	}
+
+	mmHSet.mock.inspectFuncHSet = f
+
+	return mmHSet
+}
+
+// Return sets up results that will be returned by Cache.HSet
+func (mmHSet *mCacheMockHSet) Return(err error) *CacheMock {
+	if mmHSet.mock.funcHSet != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Set")
+	}
+
+	if mmHSet.defaultExpectation == nil {
+		mmHSet.defaultExpectation = &CacheMockHSetExpectation{mock: mmHSet.mock}
+	}
+	mmHSet.defaultExpectation.results = &CacheMockHSetResults{err}
+	return mmHSet.mock
+}
+
+// Set uses given function f to mock the Cache.HSet method
+func (mmHSet *mCacheMockHSet) Set(f func(ctx context.Context, key string, field string, value interface{}) (err error)) *CacheMock {
+	if mmHSet.defaultExpectation != nil {
+		mmHSet.mock.t.Fatalf("Default expectation is already set for the Cache.HSet method")
+	}
+
+	if len(mmHSet.expectations) > 0 {
+		mmHSet.mock.t.Fatalf("Some expectations are already set for the Cache.HSet method")
+	}
+
+	mmHSet.mock.funcHSet = f
+	return mmHSet.mock
+}
+
+// When sets expectation for the Cache.HSet which will trigger the result defined by the following
+// Then helper
+func (mmHSet *mCacheMockHSet) When(ctx context.Context, key string, field string, value interface{}) *CacheMockHSetExpectation {
+	if mmHSet.mock.funcHSet != nil {
+		mmHSet.mock.t.Fatalf("CacheMock.HSet mock is already set by Set")
+	}
+
+	expectation := &CacheMockHSetExpectation{
+		mock:   mmHSet.mock,
+		params: &CacheMockHSetParams{ctx, key, field, value},
+	}
+	mmHSet.expectations = append(mmHSet.expectations, expectation)
+	return expectation
+}
+
+// Then sets up Cache.HSet return parameters for the expectation previously defined by the When method
+func (e *CacheMockHSetExpectation) Then(err error) *CacheMock {
+	e.results = &CacheMockHSetResults{err}
+	return e.mock
+}
+
+// Times sets number of times Cache.HSet should be invoked
+func (mmHSet *mCacheMockHSet) Times(n uint64) *mCacheMockHSet {
+	if n == 0 {
+		mmHSet.mock.t.Fatalf("Times of CacheMock.HSet mock can not be zero")
+	}
+	mm_atomic.StoreUint64(&mmHSet.expectedInvocations, n)
+	return mmHSet
+}
+
+func (mmHSet *mCacheMockHSet) invocationsDone() bool {
+	if len(mmHSet.expectations) == 0 && mmHSet.defaultExpectation == nil && mmHSet.mock.funcHSet == nil {
+		return true
+	}
+
+	totalInvocations := mm_atomic.LoadUint64(&mmHSet.mock.afterHSetCounter)
+	expectedInvocations := mm_atomic.LoadUint64(&mmHSet.expectedInvocations)
+
+	return totalInvocations > 0 && (expectedInvocations == 0 || expectedInvocations == totalInvocations)
+}
+
+// HSet implements cache.Cache
+func (mmHSet *CacheMock) HSet(ctx context.Context, key string, field string, value interface{}) (err error) {
+	mm_atomic.AddUint64(&mmHSet.beforeHSetCounter, 1)
+	defer mm_atomic.AddUint64(&mmHSet.afterHSetCounter, 1)
+
+	if mmHSet.inspectFuncHSet != nil {
+		mmHSet.inspectFuncHSet(ctx, key, field, value)
+	}
+
+	mm_params := CacheMockHSetParams{ctx, key, field, value}
+
+	// Record call args
+	mmHSet.HSetMock.mutex.Lock()
+	mmHSet.HSetMock.callArgs = append(mmHSet.HSetMock.callArgs, &mm_params)
+	mmHSet.HSetMock.mutex.Unlock()
+
+	for _, e := range mmHSet.HSetMock.expectations {
+		if minimock.Equal(*e.params, mm_params) {
+			mm_atomic.AddUint64(&e.Counter, 1)
+			return e.results.err
+		}
+	}
+
+	if mmHSet.HSetMock.defaultExpectation != nil {
+		mm_atomic.AddUint64(&mmHSet.HSetMock.defaultExpectation.Counter, 1)
+		mm_want := mmHSet.HSetMock.defaultExpectation.params
+		mm_want_ptrs := mmHSet.HSetMock.defaultExpectation.paramPtrs
+
+		mm_got := CacheMockHSetParams{ctx, key, field, value}
+
+		if mm_want_ptrs != nil {
+
+			if mm_want_ptrs.ctx != nil && !minimock.Equal(*mm_want_ptrs.ctx, mm_got.ctx) {
+				mmHSet.t.Errorf("CacheMock.HSet got unexpected parameter ctx, want: %#v, got: %#v%s\n", *mm_want_ptrs.ctx, mm_got.ctx, minimock.Diff(*mm_want_ptrs.ctx, mm_got.ctx))
+			}
+
+			if mm_want_ptrs.key != nil && !minimock.Equal(*mm_want_ptrs.key, mm_got.key) {
+				mmHSet.t.Errorf("CacheMock.HSet got unexpected parameter key, want: %#v, got: %#v%s\n", *mm_want_ptrs.key, mm_got.key, minimock.Diff(*mm_want_ptrs.key, mm_got.key))
+			}
+
+			if mm_want_ptrs.field != nil && !minimock.Equal(*mm_want_ptrs.field, mm_got.field) {
+				mmHSet.t.Errorf("CacheMock.HSet got unexpected parameter field, want: %#v, got: %#v%s\n", *mm_want_ptrs.field, mm_got.field, minimock.Diff(*mm_want_ptrs.field, mm_got.field))
+			}
+
+			if mm_want_ptrs.value != nil && !minimock.Equal(*mm_want_ptrs.value, mm_got.value) {
+				mmHSet.t.Errorf("CacheMock.HSet got unexpected parameter value, want: %#v, got: %#v%s\n", *mm_want_ptrs.value, mm_got.value, minimock.Diff(*mm_want_ptrs.value, mm_got.value))
+			}
+
+		} else if mm_want != nil && !minimock.Equal(*mm_want, mm_got) {
+			mmHSet.t.Errorf("CacheMock.HSet got unexpected parameters, want: %#v, got: %#v%s\n", *mm_want, mm_got, minimock.Diff(*mm_want, mm_got))
+		}
+
+		mm_results := mmHSet.HSetMock.defaultExpectation.results
+		if mm_results == nil {
+			mmHSet.t.Fatal("No results are set for the CacheMock.HSet")
+		}
+		return (*mm_results).err
+	}
+	if mmHSet.funcHSet != nil {
+		return mmHSet.funcHSet(ctx, key, field, value)
+	}
+	mmHSet.t.Fatalf("Unexpected call to CacheMock.HSet. %v %v %v %v", ctx, key, field, value)
+	return
+}
+
+// HSetAfterCounter returns a count of finished CacheMock.HSet invocations
+func (mmHSet *CacheMock) HSetAfterCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHSet.afterHSetCounter)
+}
+
+// HSetBeforeCounter returns a count of CacheMock.HSet invocations
+func (mmHSet *CacheMock) HSetBeforeCounter() uint64 {
+	return mm_atomic.LoadUint64(&mmHSet.beforeHSetCounter)
+}
+
+// Calls returns a list of arguments used in each call to CacheMock.HSet.
+// The list is in the same order as the calls were made (i.e. recent calls have a higher index)
+func (mmHSet *mCacheMockHSet) Calls() []*CacheMockHSetParams {
+	mmHSet.mutex.RLock()
+
+	argCopy := make([]*CacheMockHSetParams, len(mmHSet.callArgs))
+	copy(argCopy, mmHSet.callArgs)
+
+	mmHSet.mutex.RUnlock()
+
+	return argCopy
+}
+
+// MinimockHSetDone returns true if the count of the HSet invocations corresponds
+// the number of defined expectations
+func (m *CacheMock) MinimockHSetDone() bool {
+	if m.HSetMock.optional {
+		// Optional methods provide '0 or more' call count restriction.
+		return true
+	}
+
+	for _, e := range m.HSetMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			return false
+		}
+	}
+
+	return m.HSetMock.invocationsDone()
+}
+
+// MinimockHSetInspect logs each unmet expectation
+func (m *CacheMock) MinimockHSetInspect() {
+	for _, e := range m.HSetMock.expectations {
+		if mm_atomic.LoadUint64(&e.Counter) < 1 {
+			m.t.Errorf("Expected call to CacheMock.HSet with params: %#v", *e.params)
+		}
+	}
+
+	afterHSetCounter := mm_atomic.LoadUint64(&m.afterHSetCounter)
+	// if default expectation was set then invocations count should be greater than zero
+	if m.HSetMock.defaultExpectation != nil && afterHSetCounter < 1 {
+		if m.HSetMock.defaultExpectation.params == nil {
+			m.t.Error("Expected call to CacheMock.HSet")
+		} else {
+			m.t.Errorf("Expected call to CacheMock.HSet with params: %#v", *m.HSetMock.defaultExpectation.params)
+		}
+	}
+	// if func was set then invocations count should be greater than zero
+	if m.funcHSet != nil && afterHSetCounter < 1 {
+		m.t.Error("Expected call to CacheMock.HSet")
+	}
+
+	if !m.HSetMock.invocationsDone() && afterHSetCounter > 0 {
+		m.t.Errorf("Expected %d calls to CacheMock.HSet but found %d calls",
+			mm_atomic.LoadUint64(&m.HSetMock.expectedInvocations), afterHSetCounter)
 	}
 }
 
@@ -2069,13 +2723,17 @@ func (m *CacheMock) MinimockSetInspect() {
 func (m *CacheMock) MinimockFinish() {
 	m.finishOnce.Do(func() {
 		if !m.minimockDone() {
+			m.MinimockCloseInspect()
+
 			m.MinimockExpireInspect()
 
 			m.MinimockGetInspect()
 
-			m.MinimockHGetAllInspect()
+			m.MinimockHDelInspect()
 
-			m.MinimockHashSetInspect()
+			m.MinimockHGetInspect()
+
+			m.MinimockHSetInspect()
 
 			m.MinimockPingInspect()
 
@@ -2103,10 +2761,12 @@ func (m *CacheMock) MinimockWait(timeout mm_time.Duration) {
 func (m *CacheMock) minimockDone() bool {
 	done := true
 	return done &&
+		m.MinimockCloseDone() &&
 		m.MinimockExpireDone() &&
 		m.MinimockGetDone() &&
-		m.MinimockHGetAllDone() &&
-		m.MinimockHashSetDone() &&
+		m.MinimockHDelDone() &&
+		m.MinimockHGetDone() &&
+		m.MinimockHSetDone() &&
 		m.MinimockPingDone() &&
 		m.MinimockSetDone()
 }
