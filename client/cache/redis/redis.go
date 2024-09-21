@@ -8,13 +8,46 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
-func (c *client) HashSet(ctx context.Context, key string, values interface{}) error {
+func (c *client) HashSet(ctx context.Context, key, field string, value interface{}) error {
 	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
-		_, err := conn.Do("HSET", redis.Args{key}.AddFlat(values)...)
+		_, err := conn.Do("HSET", redis.Args{key, field}.Add(value)...)
 		if err != nil {
 			return err
 		}
 
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *client) HashGet(ctx context.Context, key, field string) (interface{}, error) {
+	var value interface{}
+	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
+		var errEx error
+		value, errEx = conn.Do("HGET", key, field)
+		if errEx != nil {
+			return errEx
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return value, nil
+}
+
+func (c *client) HashDel(ctx context.Context, key, field string) error {
+	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
+		_, err := conn.Do("HDEL", key, field)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
