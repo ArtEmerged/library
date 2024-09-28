@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Get gets value from redis
 func (c *client) Get(ctx context.Context, key string, in interface{}) error {
 	var value interface{}
 	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
@@ -38,7 +39,8 @@ func (c *client) Get(ctx context.Context, key string, in interface{}) error {
 	return nil
 }
 
-func (c *client) Set(ctx context.Context, key string, value interface{}) error {
+// Set sets value in redis with expiration
+func (c *client) Set(ctx context.Context, key string, value interface{}, duration time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return errors.Wrap(err, "can't marshal value")
@@ -50,6 +52,12 @@ func (c *client) Set(ctx context.Context, key string, value interface{}) error {
 			return err
 		}
 
+		if duration > 0 {
+			err = c.expire(conn, duration, key)
+			if err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if err != nil {
@@ -59,7 +67,30 @@ func (c *client) Set(ctx context.Context, key string, value interface{}) error {
 	return nil
 }
 
-func (c *client) HSet(ctx context.Context, key, field string, value interface{}) error {
+// Del deletes value from redis
+func (c *client) Del(ctx context.Context, key ...string) error {
+	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
+		args := redis.Args{}
+		for _, k := range key {
+			args = args.Add(k)
+		}
+		_, err := conn.Do("DEL", args...)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// HSet sets value in redis with expiration
+func (c *client) HSet(ctx context.Context, key, field string, value interface{}, duration time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return errors.Wrap(err, "can't marshal value")
@@ -71,6 +102,13 @@ func (c *client) HSet(ctx context.Context, key, field string, value interface{})
 			return err
 		}
 
+		if duration > 0 {
+			err = c.expire(conn, duration, key, field)
+			if err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -80,6 +118,7 @@ func (c *client) HSet(ctx context.Context, key, field string, value interface{})
 	return nil
 }
 
+// HGet gets value from redis
 func (c *client) HGet(ctx context.Context, key, field string, in interface{}) error {
 	var value interface{}
 	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
@@ -108,6 +147,7 @@ func (c *client) HGet(ctx context.Context, key, field string, in interface{}) er
 	return nil
 }
 
+// HDel deletes value from redis
 func (c *client) HDel(ctx context.Context, key string, field ...string) error {
 	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
 		args := redis.Args{key}
@@ -147,9 +187,10 @@ func (c *client) HGetAll(ctx context.Context, key string) ([]interface{}, error)
 	return values, nil
 }
 
+// Expire sets expiration time for key
 func (c *client) Expire(ctx context.Context, key string, expiration time.Duration) error {
 	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
-		_, err := conn.Do("EXPIRE", key, int(expiration.Seconds()))
+		err := c.expire(conn, expiration, key)
 		if err != nil {
 			return err
 		}
@@ -163,6 +204,7 @@ func (c *client) Expire(ctx context.Context, key string, expiration time.Duratio
 	return nil
 }
 
+// Ping checks connection
 func (c *client) Ping(ctx context.Context) error {
 	err := c.execute(ctx, func(ctx context.Context, conn redis.Conn) error {
 		_, err := conn.Do("PING")
@@ -179,8 +221,20 @@ func (c *client) Ping(ctx context.Context) error {
 	return nil
 }
 
+// Close closes connection
 func (c *client) Close() error {
 	return c.pool.Close()
+}
+
+func (c *client) expire(conn redis.Conn, expiration time.Duration, key ...string) error {
+	for _, k := range key {
+		_, err := conn.Do("EXPIRE", k, int(expiration.Seconds()))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *client) execute(ctx context.Context, handler handler) error {
